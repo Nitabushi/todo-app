@@ -1,0 +1,26 @@
+# Webフレームワーク
+Flask
+Flask-Cors
+
+# DB関連
+SQLAlchemy
+PyMySQL
+Flask-Migrate
+
+# 認証・環境変数
+werkzeug
+python-dotenv
+
+# APIドキュメント
+flasgger
+
+# PDF出力
+reportlab
+
+# テスト
+pytest
+pytest-cov
+
+# 開発ツール
+black
+flake8
