@@ -1,0 +1,32 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: todo-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_NAME:-todo_app}
+      MYSQL_USER: ${DB_USER:-todo_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-secret}
+      TZ: Asia/Tokyo
+    ports:
+      - "3307:3306"
+    volumes:
+      # 初回起動時に /docker-entrypoint-initdb.d/*.sql を自動実行
+      - ./db/init:/docker-entrypoint-initdb.d
+      # データ永続化
+      - ./db-data:/var/lib/mysql
+
+  backend:
+    build: .
+    container_name: todo-backend
+    depends_on:
+      - db
+    ports:
+      - "8000:5000"
+    env_file:
+      - .env        # アプリ用の環境変数
+    environment:
+      TZ: Asia/Tokyo
+    # 開発時のホットリロード用途（任意）
+    volumes:
+      - .:/app
