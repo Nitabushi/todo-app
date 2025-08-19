@@ -1,0 +1,20 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtualenv
+.venv/
+venv/
+todo-env/
+
+# Local data
+db-data/
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
