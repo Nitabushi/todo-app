@@ -1,0 +1,537 @@
+openapi: 3.0.3
+info:
+  title: ToDo App API
+  version: 1.0.0
+  description: |
+    シンプルな ToDo アプリの API 仕様。
+    - 一般ユーザー: ToDo の一覧、登録、削除、PDF エクスポート
+    - 管理者: ユーザーの一覧・登録・削除
+    - 認証: JWT ベースの Bearer 認証
+servers:
+  - url: http://localhost:8000
+    description: "Local (docker-compose: host 8000 -> container 5000)"
+
+tags:
+  - name: Health
+  - name: Auth
+  - name: Users
+    description: 一般ユーザー自身の情報
+  - name: Admin Users
+    description: 管理者用のユーザー管理
+  - name: Todos
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: ヘルスチェック
+      description: アプリとDB接続などの基本動作確認用。
+      security: []  # 認証不要
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: ログイン（トークン発行）
+      description: ユーザー名とパスワードでログインし、JWT を発行します。
+      security: []  # 認証不要
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              default:
+                value: { username: "alice", password: "Password123!" }
+      responses:
+        '200':
+          description: ログイン成功（アクセストークン）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: ログアウト（任意）
+      description: サーバ側でトークン失効（ブラックリスト方式など）を行う場合に使用。
+      responses:
+        '204':
+          description: ログアウト成功（コンテンツなし）
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /users/me:
+    get:
+      tags: [Users]
+      summary: 自分自身のユーザー情報取得
+      responses:
+        '200':
+          description: ログイン中ユーザーの情報
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /todos:
+    get:
+      tags: [Todos]
+      summary: ToDo 一覧取得（自分の分）
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: done
+          in: query
+          schema: { type: boolean }
+          description: 完了フラグで絞り込み
+        - name: q
+          in: query
+          schema: { type: string }
+          description: タイトルの部分一致検索
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [created_at, -created_at, title, -title]
+          description: ソートキー。`-` で降順
+      responses:
+        '200':
+          description: ToDo 一覧
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TodoListResponse'
+    post:
+      tags: [Todos]
+      summary: ToDo 登録
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TodoCreate'
+      responses:
+        '201':
+          description: 登録成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Todo'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /todos/{todoId}:
+    get:
+      tags: [Todos]
+      summary: ToDo 詳細取得
+      parameters:
+        - $ref: '#/components/parameters/TodoId'
+      responses:
+        '200':
+          description: 取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Todo'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    patch:
+      tags: [Todos]
+      summary: ToDo 更新
+      parameters:
+        - $ref: '#/components/parameters/TodoId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TodoUpdate'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Todo'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    delete:
+      tags: [Todos]
+      summary: ToDo 削除
+      parameters:
+        - $ref: '#/components/parameters/TodoId'
+      responses:
+        '204':
+          description: 削除成功
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /todos/export.pdf:
+    get:
+      tags: [Todos]
+      summary: ToDo 一覧の PDF エクスポート
+      description: ログインユーザーの ToDo 一覧を PDF でダウンロードします。
+      parameters:
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: PDF ファイル
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /admin/users:
+    get:
+      tags: [Admin Users]
+      summary: ユーザー一覧取得（管理者）
+      x-roles: ["admin"]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [user, admin]
+          description: 役割で絞り込み
+      responses:
+        '200':
+          description: ユーザー一覧
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+    post:
+      tags: [Admin Users]
+      summary: ユーザー登録（管理者）
+      x-roles: ["admin"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '201':
+          description: 登録成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  /admin/users/{userId}:
+    get:
+      tags: [Admin Users]
+      summary: ユーザー詳細取得（管理者）
+      x-roles: ["admin"]
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: 取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    patch:
+      tags: [Admin Users]
+      summary: ユーザー更新（管理者）
+      x-roles: ["admin"]
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    delete:
+      tags: [Admin Users]
+      summary: ユーザー削除（管理者）
+      x-roles: ["admin"]
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: 削除成功
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      description: ページ番号（1始まり）
+    PerPageParam:
+      name: per_page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      description: 1ページあたり件数
+    TodoId:
+      name: todoId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+
+  responses:
+    UnauthorizedError:
+      description: 認証が必要です
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          examples:
+            default: { value: { message: "Unauthorized" } }
+    ForbiddenError:
+      description: 権限が不足しています
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          examples:
+            default: { value: { message: "Forbidden" } }
+    NotFoundError:
+      description: リソースが存在しません
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          examples:
+            default: { value: { message: "Not Found" } }
+    ValidationError:
+      description: 入力値エラー
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ValidationError' }
+          examples:
+            default:
+              value:
+                message: "Validation error"
+                errors:
+                  title: ["must not be empty"]
+
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "ok"
+        db:
+          type: string
+          example: "up"
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+        password:
+          type: string
+          format: password
+          minLength: 8
+
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT アクセストークン
+        token_type:
+          type: string
+          example: "Bearer"
+        expires_in:
+          type: integer
+          description: 秒数
+          example: 3600
+        user:
+          $ref: '#/components/schemas/User'
+
+    User:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        username: { type: string, example: "alice" }
+        role:
+          type: string
+          enum: [user, admin]
+          example: "user"
+        created_at:
+          type: string
+          format: date-time
+
+    UserCreate:
+      type: object
+      required: [username, password, role]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+        password:
+          type: string
+          format: password
+          minLength: 8
+        role:
+          type: string
+          enum: [user, admin]
+          default: user
+
+    UserUpdate:
+      type: object
+      properties:
+        password:
+          type: string
+          format: password
+          minLength: 8
+        role:
+          type: string
+          enum: [user, admin]
+
+    Todo:
+      type: object
+      properties:
+        id: { type: integer, example: 10 }
+        title: { type: string, example: "Buy milk" }
+        description: { type: string, nullable: true, example: "2L low-fat" }
+        done: { type: boolean, example: false }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    TodoCreate:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          nullable: true
+
+    TodoUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          nullable: true
+        done:
+          type: boolean
+
+    PaginationMeta:
+      type: object
+      properties:
+        page: { type: integer, example: 1 }
+        per_page: { type: integer, example: 20 }
+        total: { type: integer, example: 57 }
+        total_pages: { type: integer, example: 3 }
+
+    TodoListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Todo' }
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    UserListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/User' }
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Something went wrong"
+
+    ValidationError:
+      allOf:
+        - $ref: '#/components/schemas/Error'
+        - type: object
+          properties:
+            errors:
+              type: object
+              additionalProperties:
+                type: array
+                items: { type: string }
+
+security:
+  - BearerAuth: []
