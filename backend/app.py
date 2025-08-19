@@ -1,9 +1,9 @@
+# backend/app.py
 from flask import Flask, jsonify
 from flask_cors import CORS
 
 from .config import Config
-from .models import db  # db オブジェクト（User/Admin/Todo は __init__ で読み込まれる）
-
+from .models import db  # User/Todo は __init__ で読み込まれる
 
 def create_app() -> Flask:
     app = Flask(__name__)
@@ -19,7 +19,7 @@ def create_app() -> Flask:
     def health():
         return jsonify({"status": "ok"})
 
-    # ★学習用：最初のテーブル作成（本番では Flask-Migrate を使う想定）
+    # 学習用：最初のテーブル作成（本番は Flask-Migrate 推奨）
     @app.post("/init-db")
     def init_db():
         with app.app_context():
